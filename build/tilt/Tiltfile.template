@@ -1,0 +1,28 @@
+os.putenv ('DOCKER_BUILDKIT' , '1' )
+isWindows = True if os.name == "nt" else False
+
+name = '${reponame}'
+expected_ref = "%EXPECTED_REF%" if isWindows else "$EXPECTED_REF"
+rid = "ubuntu.18.04-x64"
+configuration = "Debug"
+isWindows = True if os.name == "nt" else False
+
+local_resource(
+  'live-update-build',
+  cmd= 'dotnet publish src/MyNamespace.DotnetAccelerator --configuration ' + configuration + ' --runtime ' + rid + ' --self-contained false --output ./src/MyNamespace.DotnetAccelerator/bin/.buildsync',
+  deps=['./src/MyNamespace.DotnetAccelerator/bin/' + configuration],
+  ignore=['./src/MyNamespace.DotnetAccelerator/bin/**/' + rid]
+)
+
+custom_build(
+        name,
+        'docker build . -f ./src/MyNamespace.DotnetAccelerator/Dockerfile -t ' + expected_ref,
+        deps=["./src/MyNamespace.DotnetAccelerator/bin/.buildsync", "./src/MyNamespace.DotnetAccelerator/Dockerfile", "./config"],
+        live_update=[
+            sync('./src/MyNamespace.DotnetAccelerator/bin/.buildsync', '/app'),
+            sync('./config', '/app/config'),
+        ]
+    )
+
+k8s_yaml(['${deploymentyaml}'])
+k8s_resource('dotnet-accelerator', port_forwards=[8080,8090,22])
